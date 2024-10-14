@@ -1,0 +1,10 @@
+.nextflow*
+work/
+outputs/
+/test/*.html
+/test/local/
+~$*.xlsx
+*.html
+
+old/
+slurm-*.out
