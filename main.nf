@@ -259,7 +259,7 @@ workflow {
       pre_umi | UMITOOLS_EXTRACT  // sample_id, reads
       UMITOOLS_EXTRACT.out.main.set { pre_demux }
    } else {
-      TRIM_CUTADAPT.out.set { pre_demux }
+      TRIM_CUTADAPT.out.main.set { pre_demux }
    }
 
    pre_demux  // sample_id, reads
