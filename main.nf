@@ -91,6 +91,7 @@ log.info pipeline_title + """\
       FASTQ dir.     : ${params.fastq_dir}
       sample sheet   : ${params.sample_sheet}
       sample names   : ${sample_names}
+      guides provided: ${params.guides}
    UMI mode          : ${params.use_umis}
    SRA options
       SRA mode       : ${params.from_sra}
@@ -396,7 +397,22 @@ process TABLE2FASTA {
       """
    else
       """
-      cp ${table} __copied_fasta__.fasta
+      cp ${table} ${table.getSimpleName()}-copied.fasta
+      """
+
+   stub:
+   if ( table.getExtension() == "csv" )
+      """
+      head -n20 ${table} > ${table.getSimpleName()}-sample.csv
+      bioino table2fasta ${table.getSimpleName()}-sample.csv \
+         --sequence ${sequence_column} \
+         --format CSV \
+         --name ${name_column} \
+         --output ${table.getSimpleName()}.fasta
+      """
+   else
+      """
+      head -n20 ${table} > ${table.getSimpleName()}-copied.fasta
       """
 }
 
@@ -529,11 +545,11 @@ process PULL_FASTQ_FROM_SRA {
    NCBI_API_KEY=${ncbi_api_key} \
    fastq-dump \
       --stdout \
+      -X 10000 \
       --read-filter pass \
       --split-files ${sra_run_id} \
-      | head -n100000 \
       | gzip -v --best \
-      > ${sample_name}.fastq.gz
+      > ${sample_id}.fastq.gz
    """
 }
 
@@ -892,7 +908,7 @@ process COUNTS_PER_GUIDE {
       | cut -f2 \
       | sort -k1 \
       | uniq -c \
-      | awk -F' ' -v OFS=\$'\\t' '{ print \$2,"${sample_name}",\$1 }' \
+      | awk -F' ' -v OFS=\$'\\t' '{ print \$2,"${sample_id}",\$1 }' \
       | sort -k1 \
       > ${sample_id}.counts0.tsv
 
@@ -966,6 +982,7 @@ process ANNOTATE_COUNTS_WITH_GENOME_FEATURES {
    | sed 's/'\$GUIDE_NAME'/guide_name/' \
    > ${guide_tsv}.mini
    cat ${counts} \
+   | sed 's/'\$GUIDE_NAME'/guide_name/' \
    | python ${projectDir}/bin/join.py ${guide_tsv}.mini \
    > ${counts.getSimpleName()}-annotated.tsv
    """
