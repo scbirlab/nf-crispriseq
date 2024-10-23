@@ -121,10 +121,10 @@ The following parameters have default values that can be overridden if necessary
 - `output = "outputs"`: path to directory to put output files
 - `sample_names = "sample_id"`: column of `sample_sheet` to take as a sample identifier. Use `"Run"` for SRA table inputs.
 - `use_umis = false`: Whether to the reads include UMIs
-- `from_sra = false`: Whether the FASTQ files should be pulled from the SRA
+- `from_sra = false`: Whether the FASTQ files should be pulled from the SRA instead of provided as local files
 - `guides = true`: Whether the name of a CSV of guide sequences is provided in the `sample_sheet`
-- `name_column = "Name"`: If using a CSV of guide RNA sequences, the column containing the name of each guide
-- `sequence_column = "guide_sequence"`: If using a CSV of guide RNA sequences, the column containing the sequence of each guide
+- `name_column = "Name"`: If using a CSV of guide RNA sequences (`guides = true`), the column containing the name of each guide
+- `sequence_column = "guide_sequence"`: If using a CSV of guide RNA sequences (`guides = true`), the column containing the sequence of each guide
 - `rc = false`: Whether to reverse complement the guide sequences before mapping.
 - `trim_qual = 10` : For `cutadapt`, the minimum Phred score for trimming 3' calls
 - `min_length = 105` : For `cutadapt`, the minimum trimmed length of a read. Shorter reads will be discarded
@@ -170,20 +170,47 @@ The file must have a header with the column names below, and one line per sample
 
 - `sample_id`: the unique name of the sample
 - `genome`: The [NCBI assembly accession](https://www.ncbi.nlm.nih.gov/datasets/genome/) number for the organism that the guide RNAs are targeting. This number starts with "GCF_" or "GCA_".
-- `reads`: the search glob to find FASTQ files for each sample in `fastq_dir` (see [config](#inputs)). 
-The pipeline will look for files matching `<fastq_dir>/*<dir>*`, and should match only the forward read if you had paired-end sequencing.
-- `adapter_5prime`: the 5' adapter on the forward read to trim to in [`cutadapt` format](https://cutadapt.readthedocs.io/en/stable/guide.html#specifying-adapter-sequences). Sequence _to the left_ will be removed, but the adapters themselves will be retained.
-- `adapter_3prime`: the 3' adapter on the forward read to trim to in [`cutadapt` format](https://cutadapt.readthedocs.io/en/stable/guide.html#specifying-adapter-sequences). Sequence _**matching the adapter** and everything to the right_ will be removed.
-- `umi_pattern`: the cell barcode and UMI pattern in [`umitools` regex format](https://umi-tools.readthedocs.io/en/latest/regex.html#regex-regular-expression-mode) for the forward read
 - `pam`: The name (e.g. "Spy" or "Sth1") or sequence (e.g "NGG" or "NGRVAN") of the dCas9 PAM used in the experiment
 - `scaffold`: The name of the sgRNA scaffold ("PerturbSeq" or "Sth1") used in the experiment.
+The pipeline will look for files matching `<fastq_dir>/*<dir>*`, and should match **only the forward read** if you had paired-end sequencing.
+- `adapter_5prime`: the 5' adapter on the forward read to trim to in [`cutadapt` format](https://cutadapt.readthedocs.io/en/stable/guide.html#specifying-adapter-sequences). Sequence _to the left_ will be removed, but the adapters themselves will be retained.
+- `adapter_3prime`: the 3' adapter on the forward read to trim to in [`cutadapt` format](https://cutadapt.readthedocs.io/en/stable/guide.html#specifying-adapter-sequences). Sequence _**matching the adapter** and everything to the right_ will be removed.
+
+If you have set `from_sra = false` (the default):
+- `reads`: the search glob to find FASTQ files for each sample in `fastq_dir` (see [config](#inputs)). 
+Otherwise with `from_sra = true`:
+- `Run`: the SRA Run ID
+
+If you have set `use_umis = true` (the default):
+- `umi_pattern`: the cell barcode and UMI pattern in [`umitools` regex format](https://umi-tools.readthedocs.io/en/latest/regex.html#regex-regular-expression-mode) for the forward read
+
+If you have set `guides = true` (the default):
+- `guides_filename`: the name of a file in the inputs directory containing guide sequences. 
 
 Here is an example of the sample sheet:
 
-| sample_id | reads | guideA     | promoters     | guideB     | adapter3_read1     | adapter3_read2                      | adapter5_read1                     | adapter5_read2        | umi_read1                                                                           | umi_read2                                                                                            | 
-| --------- | ------------- | ---------- | ------------- | ---------- | ------------------ | ----------------------------------- | ---------------------------------- | ---------------------- | ---------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------- |
-| lib001    | FAU6865A1     | guideA.csv | promoters.csv | guideB.csv | ACAGTN{10}GAGCTCAT | TCTGACCAGGGAAAATAGCCCTCTGACCTGGGGAT | NNNNNNNNTTGTAGCTTCTTTCGAGTACAAAAAC | CGACCGTCTGGAGTACAAAAAC | ^(?P<umi_1>.{8})(?P<discard_1>.{26}).*(?P<discard_2>.{71})(?P<promoterBC_1>.{10})$ | ^(?P<discard_3>.{22}).*(?P<discard_4>.{45})(?P<cell_1>.{10})(?P<discard_5>.{5})(?P<promoterBC_2>.{10})$ |
-| lib002    | FAU6865A2     | guideA.csv | promoters.csv | guideB.csv | ACAGTN{10}GAGCTCAT | TCTGACCAGGGAAAATAGCCCTCTGACCTGGGGAT | NNNNNNNNTTGTAGCTTCTTTCGAGTACAAAAAC | CGACCGTCTGGAGTACAAAAAC | ^(?P<umi_1>.{8})(?P<discard_1>.{26}).*(?P<discard_2>.{71})(?P<promoterBC_1>.{10})$ | ^(?P<discard_3>.{22}).*(?P<discard_4>.{45})(?P<cell_1>.{10})(?P<discard_5>.{5})(?P<promoterBC_2>.{10})$ |
+| sample_id | genome          | reads           | guides_filename | pam  | scaffold   | adapter_5prime           | adapter_3prime     | umi_pattern                             | 
+| --------- | --------------- | --------------- | --------------- | ---- | ---------- | ------------------------ | ------------------ | --------------------------------------- |  
+| lib001    | GCA_003076915.1 | FAU6865A42_*_R1 | guides.csv      | Spy  | PerturbSeq | ^N{8}TCGACTGAGCTGAAAGAAT | GTTTAAGAGCTATGCTGG | ^(?P<umi_1>.{8})(?P<discard_1>.{86}).+$ | 
+| lib002    | GCA_003076915.1 | FAU6865A43_*_R1 | guides.csv      | Spy  | PerturbSeq | ^N{8}TCGACTGAGCTGAAAGAAT | GTTTAAGAGCTATGCTGG | ^(?P<umi_1>.{8})(?P<discard_1>.{86}).+$ | 
+
+And here is an example of the `guides_filename` (`guides.csv` in this example):
+
+| Name       | guide_sequence      |
+| ---------- | ------------------- |
+| guide001   | TCGACTGAGCTGAAAGAAT |
+| guide002   | GTTTAAGAGCTATGCTGGT |
+
+It is also possible to provide the guides as a fasta file:
+
+```
+>guide001
+TCGACTGAGCTGAAAGAAT
+>guide002
+GTTTAAGAGCTATGCTGGT
+```
+
+You don't need to provide gene anntotation infomation, because the pipeline will map these guides back to the genome and annotate the features for you.
 
 ## Outputs
 
