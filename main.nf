@@ -558,8 +558,7 @@ process TRIM_CUTADAPT {
    
    tag "${sample_id}"
 
-   label 'med_mem'
-   time '12h'
+   label 'big_cpu'
 
    publishDir( processed_o, 
                mode: 'copy' )
@@ -647,8 +646,7 @@ process CUTADAPT_DEMUX {
 
    tag "${sample_id}" 
 
-   label 'big_mem'
-   time '6h'
+   label 'big_cpu'
 
    publishDir( path: mapped_o, 
                mode: 'copy' )
