@@ -703,7 +703,7 @@ process CUTADAPT_DEMUX {
 
    cutadapt \
 		-g '^file:${fastas.getSimpleName()}.appended-dedup.fasta' \
-      -e 1 \
+      -e 0 \
       -j ${task.cpus} \
       --no-indels \
 		--report full \
