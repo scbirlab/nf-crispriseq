@@ -1,4 +1,4 @@
-name: nf-bccount
+name: nf-crispriseq
 
 channels:
     - conda-forge
@@ -12,7 +12,7 @@ dependencies:
     - bioconda::sra-tools
     - pip:
         - "git+https://github.com/scbirlab/crispio.git@fitness#egg=crispio[fit_cuda_local]"
-        - 'carabiner-tools[mpl,pd]>=0.0.3.post1'
-        - 'cutadapt>=4.0'
-        - 'multiqc>=1.21'
-        - 'umi-tools>=1.1.6'
+        - 'carabiner-tools[mpl,pd]==0.0.3.post1'
+        - 'cutadapt==5.0'
+        - 'multiqc==1.21'
+        - 'umi-tools==1.1.6'
