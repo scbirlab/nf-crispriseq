@@ -19,7 +19,8 @@ jobs:
         channels: conda-forge,bioconda
         channel-priority: true
     - uses: nf-core/setup-nextflow@v1
-      version: 24.04.4
+      with:
+        version: 24.04.4
     - name: Test Nextflow pipeline
       run: |
           pwd
