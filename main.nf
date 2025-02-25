@@ -586,6 +586,7 @@ process TRIM_CUTADAPT {
 		--report full \
       --action trim \
 		--discard-untrimmed \
+      -j ${task.cpus} \
 		-o ${sample_id}_5prime_R1.fastq.gz \
 		${sample_id}_3prime_R?.fastq.gz \
       > ${sample_id}.3prime.cutadapt.log
@@ -596,6 +597,7 @@ process TRIM_CUTADAPT {
 		--report full \
       --action retain \
 		--discard-untrimmed \
+      -j ${task.cpus} \
 		-o ${sample_id}_R1.trimmed.fastq.gz \
 		${sample_id}_5prime_R?.fastq.gz \
       > ${sample_id}.5prime.cutadapt.log
@@ -673,10 +675,10 @@ process CUTADAPT_DEMUX {
 
    # de-duplicate
    awk '/^[ATCG]/' ${fastas.getSimpleName()}.appended.fasta \
-      | sort \
-      | uniq -c \
-      | awk -F' ' '\$1 > 1 { print \$2 }' \
-      > duplicate-seqs.txt
+   | sort \
+   | uniq -c \
+   | awk -F' ' '\$1 > 1 { print \$2 }' \
+   > duplicate-seqs.txt
 
    if [ \$(cat duplicate-seqs.txt | wc -l) -gt 0 ] 
    then
@@ -684,27 +686,27 @@ process CUTADAPT_DEMUX {
          --no-group-separator \
          -f duplicate-seqs.txt \
          ${fastas.getSimpleName()}.appended.fasta \
-         > duplicate-seqs2.txt
+      > duplicate-seqs2.txt
    
       grep -Fvx \
          --no-group-separator \
          -f duplicate-seqs2.txt \
          ${fastas.getSimpleName()}.appended.fasta \
-         > ${fastas.getSimpleName()}.appended-dedup.fasta
+      > ${fastas.getSimpleName()}.appended-dedup.fasta
    else
       ln -s ${fastas.getSimpleName()}.appended.fasta \
          ${fastas.getSimpleName()}.appended-dedup.fasta
    fi
 
    zcat ${reads} \
-      | awk '((NR + 3) % 4 == 0 || (NR + 3) % 4 == 2); (NR + 3) % 4 == 1 { print "'\$PAL_APP'"\$0"'\$PAL_APP'" }; (NR + 3) % 4 == 3 { print "${qual_to_append}"\$0"${qual_to_append}" }' \
-      | gzip --best \
-      > ${reads.getSimpleName()}.appended.fastq.gz
+   | awk '((NR + 3) % 4 == 0 || (NR + 3) % 4 == 2); (NR + 3) % 4 == 1 { print "'\$PAL_APP'"\$0"'\$PAL_APP'" }; (NR + 3) % 4 == 3 { print "${qual_to_append}"\$0"${qual_to_append}" }' \
+   | gzip --best \
+   > ${reads.getSimpleName()}.appended.fastq.gz
 
    cutadapt \
 		-g '^file:${fastas.getSimpleName()}.appended-dedup.fasta' \
       -e 1 \
-      -j 1 \
+      -j ${task.cpus} \
       --no-indels \
 		--report full \
       --action lowercase \
