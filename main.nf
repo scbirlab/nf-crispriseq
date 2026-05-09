@@ -107,15 +107,16 @@ include {
 } from './modules/count_utils.nf'
 include { 
    anchor_sequences; 
-   count_guides_with_cutadapt;
+   Count_guides_with_cutadapt;
+   Count_guides_exact;
 } from './modules/demux.nf'
 include { 
    download_eggnog_databases;
    get_functional_sets_with_eggnog;
 } from './modules/eggnog.nf'
 include { 
-   calculate_relative_fitness;
-   stack_tables;
+   Bartab_fit;
+   Bartab_plot;
 } from './modules/fitness.nf'
 include { multiQC } from './modules/multiqc.nf'
 include { 
@@ -141,6 +142,9 @@ include {
    UMItools_extract;
    UMItools_whitelist;
 } from './modules/umitools.nf'
+include { 
+   Stack_tables;
+} from './modules/utils.nf'
 
 workflow {
 
@@ -230,7 +234,7 @@ workflow {
 
    fetch_genome_from_NCBI(
       genome_pam_ch
-         .map { it[1] }  // genome_acc
+         .map { v -> v[1] }  // genome_acc
          .unique(),
       Channel.value( true ), // include protein FASTA for eggNOG
    )
@@ -238,12 +242,12 @@ workflow {
    Channel.of( params.eggnog_url ) 
       | download_eggnog_databases
    fetch_genome_from_NCBI.out
-      .map { tuple( it[0], it[1][1], it[2] ) }
+      .map { v -> tuple( v[0], v[1][1], v[2] ) }
       .combine( download_eggnog_databases.out ) 
       | get_functional_sets_with_eggnog
 
    fetch_genome_from_NCBI.out
-      .map { tuple( it[0], it[1][0] ) }
+      .map { v -> tuple( v[0], v[1][0] ) }
       .combine( get_functional_sets_with_eggnog.out.gff, by: 0 )
       .set { genome_info }
    
@@ -252,6 +256,9 @@ workflow {
       Channel.value( params.trim_qual ), 
       Channel.value( params.min_length ),
       Channel.value( params.retain_5prime ),
+      Channel.value( !params.keep_missing_3prime ),
+      Channel.value( !params.keep_missing_5prime ),
+      Channel.value( params.max_length ),
    )  // sample_id, [reads]
    trim_using_cutadapt.out.main.set { trimmed }
    trim_using_cutadapt.out.logs.set { trim_logs }
@@ -259,11 +266,11 @@ workflow {
    if ( params.guides ) {
 
       csv_ch
-         .map { tuple( 
-            it.sample_id, 
-            it.guides_filename,
+         .map { v -> tuple( 
+            v.sample_id, 
+            v.guides_filename,
             file( 
-               "${params.inputs}/${it.guides_filename}", 
+               "${params.inputs}/${v.guides_filename}", 
                checkIfExists: true,
             ),
          ) }
@@ -272,23 +279,23 @@ workflow {
 
       table2fasta(
          guide_csv
-            .map { it[1..2] }  // guide_filename, guide_file
+            .map { v -> v[1..2] }  // guide_filename, guide_file
             .unique(),
          Channel.value( params.sequence_column ),
          Channel.value( params.name_column ),
       )
 
       guide_csv
-         .map { it[1..0] }  // guide_filename, sample_id
+         .map { v -> v[1..0] }  // guide_filename, sample_id
          .unique()
          .combine( table2fasta.out, by: 0 )  // guide_filename, sample_id, guide_fasta
-         .map { it[1..-1] }  // sample_id, guide_fasta
+         .map { v -> v[1..-1] }  // sample_id, guide_fasta
          .unique()     
          .set { guide_fasta0 }
 
       guide_fasta0
          .combine( genome_pam_ch, by: 0 )  // sample_id, guide_fasta, genome_acc, pam, scaffold
-         .map { it[2..4] + [ it[1] ] }  // genome_acc, pam, scaffold, guide_fasta
+         .map { v -> v[2..4] + [ v[1] ] }  // genome_acc, pam, scaffold, guide_fasta
          .unique()
          .combine( 
             genome_info, 
@@ -298,7 +305,8 @@ workflow {
       map_guides_to_genome_features.out.main
          .set { guide_gff }  // genome_acc, pam, guide_gff
 
-   } else {
+   } 
+   else {
 
       genome_pam_ch
          .map { it[1..-1] }  // genome_acc, pam, scaffold
@@ -395,21 +403,40 @@ workflow {
          Channel.value( params.use_clone_bc ),
       )
       UMItools_extract.out.main
-         .set { pre_demux }
+         .set { pre_demux0 }
 
    } else {
 
-      trimmed.set { pre_demux }
+      trimmed.set { pre_demux0 }
 
    }
 
-   count_guides_with_cutadapt(
-      pre_demux  // sample_id, reads
-         .combine( guide_fasta, by: 0 ).unique(),   // sample_id, reads, guide_fasta
-      Channel.value( params.allow_guide_errors ),
-   )
+   pre_demux0  // sample_id, reads
+      .combine( guide_fasta, by: 0 )
+      .unique()
+      .set { pre_demux }
 
-   count_guides_with_cutadapt.out.main 
+   if ( params.allow_guide_errors ) {
+
+      pre_demux | anchor_sequences
+      Count_guides_with_cutadapt(
+         anchor_sequences.out,   // sample_id, reads, guide_fasta
+         Channel.value( params.allow_guide_errors ),
+      )
+         .set { counted }
+
+   }
+   else {
+
+      Count_guides_exact(
+         pre_demux,   // sample_id, reads, guide_fasta
+         // Channel.value( params.allow_guide_errors ),
+      )
+         .set { counted }
+
+   }
+
+   counted.main 
       | fastq2tab  // sample_id, tab
       | count_tab
    
@@ -432,32 +459,45 @@ workflow {
          
    }
 
-   guide_counts | plot_count_distributions
+   guide_counts 
+      | plot_count_distributions
+   
+   
    ANNOTATE_COUNTS_WITH_GENOME_FEATURES(
       gff_table  // genome_acc, pam, guide_tsv
-         .map { tuple( it[0], it[2] ) }  // genome_acc, guide_tsv
+         .map { v -> tuple( v[0], v[2] ) }  // genome_acc, guide_tsv
          .unique()
          .combine( 
             genome_pam_ch
-               .map { it[1..0] }
-               .unique(), 
+               .map { v -> v[1..0] }
+               .unique(),
             by: 0,
          )  // genome_acc, guide_tsv, sample_id
-         .map { it[2..1] }  // sample_id, guide_tsv
+         .map { v -> v[2..1] }  // sample_id, guide_tsv
          .unique()
          .combine( guide_counts, by: 0 ),
       Channel.value( params.guide_name ),
+   )
+
+   ANNOTATE_COUNTS_WITH_GENOME_FEATURES.out
+      .combine(
+         sample2expt,
+         by: 0,
+      )
+      .map { v -> tuple( v[-1], v[1] ) }
+      .groupTuple( by: 0 )
+      .set { counts_per_expt }
+
+   Stack_tables(
+      counts_per_expt,
+      Channel.value( "counts-by-experiment" ),
+      Channel.value( "counts.tsv" )
    )
    
 
    if ( params.do_fitness ) {
       
-      guide_counts
-         .combine( sample2expt, by: 0 )
-         .map { tuple( it[-1], it[1] ) }
-         .groupTuple( by: 0 )
-         | stack_tables
-      calculate_relative_fitness(
+      Bartab_fit(
          stack_tables.out,
          Channel.value( file( "${params.sample_sheet}" ) ),
          Channel.value( params.growth ? file( "${params.growth}" ) : file( "placeholder" ) ),
@@ -468,6 +508,11 @@ workflow {
          Channel.value( params.timepoint_column ),
          Channel.value( params.concentration_column ),
       )
+      Bartab_plot(
+         Bartab_fit.out.h5ad,
+         Channel.value( params.concentration_column ),
+         Channel.value( params.reference_guide ),
+      )
       // JOIN_GFF(calculate_relative_fitness.out.table, gff_table)
       // PLOT_FITNESS(JOIN_GFF.out, essential_ch)
    }
@@ -475,7 +520,7 @@ workflow {
    trim_logs
       .concat(
          fastQC.out.logs,
-         // count_guides_with_cutadapt.out.logs,
+         // counted.logs,
       )
       .flatten()
       .unique()
@@ -485,45 +530,6 @@ workflow {
 }
 
 
-// stack count TSV files and merge the condition table
-process STACK_JOIN_CONDITIONS {
-
-   tag "${conditions}"
-
-   label 'med_mem'
-   time '24h'
-
-   publishDir( 
-      "${params.outputs}/counts", 
-      mode: 'copy',
-      saveAs: { "${id}.${it}" },
-   )
-
-   input:
-   path '??/*'
-   path conditions
-
-   output:
-   path "counts.tsv" 
-
-   script:
-   """
-   files=(??/*)
-   for f in "\${files[@]}"
-   do
-      python ${projectDir}/bin/join.py "${conditions}" "," \
-      < "\$f" \
-      > "\$f.joined.tsv"
-   done
-
-   outputs=(*.joined.tsv)
-
-   head -n1 "\${outputs[0]}" \
-   | cat - <(tail -q -n+2 "\${outputs[@]}") \
-   > counts.tsv
-
-   """
-}
 
 // merge the guide table
 process ANNOTATE_COUNTS_WITH_GENOME_FEATURES {

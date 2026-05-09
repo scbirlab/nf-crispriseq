@@ -79,6 +79,12 @@ process download_FASTQ_from_SRA {
 
    label 'big_cpu'
 
+   publishDir( 
+      "${params.outputs}/sra", 
+      mode: 'copy',
+      saveAs: { "${id}.${it}" },
+   )
+
    input:
    tuple val( id ), path( sra_run_id )
 

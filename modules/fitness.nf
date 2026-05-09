@@ -1,48 +1,4 @@
-process stack_tables {
-
-   tag "${id}"
-
-   publishDir(
-      "${params.outputs}/counts", 
-      mode: 'copy',
-      saveAs: { "${id}.${it}" },
-   )
-
-   input:
-   tuple val( id ), path( 'counts-??/*' )
-
-   output:
-   tuple val( id ), path( "all-expt-counts.tsv" )
-
-   script:
-   """
-   #!/usr/bin/env python
-
-   from glob import glob
-
-   import pandas as pd
-
-   (
-      pd.concat(
-         [
-            pd.read_csv(f, sep="\\t")
-            for f in glob("counts-??/*.tsv")
-         ], 
-         axis=0,
-      )
-      .to_csv(
-         "all-expt-counts.tsv", 
-         sep="\\t", 
-         index=False,
-      )
-   )
-   
-   """
-
-}
-
-
-process calculate_relative_fitness {
+process Bartab_fit {
 
    tag "${id}"
    label 'big_time'
@@ -65,64 +21,57 @@ process calculate_relative_fitness {
    val concentration_column
 
    output:
-   tuple val( id ), path( "fitness.tsv" ), emit: table
-   tuple val( id ), path( "predictions.tsv" ), emit: predictions
-   tuple val( id ), path( "regression-input.tsv" ), emit: reg_inputs
-   tuple val( id ), path( "fitness/" ), emit: plots
+   tuple val( id ), path( "bartab.h5ad" ), emit: h5ad
+   tuple val( id ), path( "bartab-fit.csv" ), emit: table
    path "*.log", emit: logs
 
    script:
    """
-   python "${projectDir}"/bin/fitness.py fitness \
-      "${counts}" \
-      --count-column ${use_umis ? "umi_count" : "read_count"} \
-      --guide-column "guide_name" \
-      --conditions "${sample_sheet}" \
+   bartab fit "${counts}" \
+      --sample-sheet "${sample_sheet}" \
+      --barcode-sheet strain_meta.csv \
       --reference "${reference_guide}" \
-      --timepoint-column "${timepoint_column}" ${concentration_column ? "--concentration-column ${concentration_column}" : ""} \
-      ${use_spike ? "--spike spike" : "--growth ${growth}"} \
-      --sample-column "sample_id" \
-      --format TSV \
-      --plot fitness \
-      --output fitness.tsv \
+      --spike-name spike \
+      ${use_spike ? "--use-spike" : "--growth ${growth}"} \
+      --barcode-column "${guide_name}" \
+      --sample-column sample_id \
+      --culture-column culture_id \
+      --count-column ${use_umis ? "umi_count" : "read_count"} \
+      --timepoint-column "${timepoint_column}" \
+      ${concentration_column ? "--concentration-column ${concentration_column} --model-type HillFitnessModel" : "--model-type WLS"} \
+      --output results.h5ad \
    2> fitness.log
 
    """
 }
 
+process Bartab_plot {
 
-// Use `crispin` to plot fitness 
-// process PLOT_FITNESS {
-//    tag{"${fitted}"}
+   tag "${id}"
 
-//    label 'big_mem'
+   publishDir(
+      "${params.outputs}/fitness/plots", 
+      mode: 'copy',
+      saveAs: { "${id}.${it}" },
+   )
 
-//    publishDir( model_o, 
-//                mode: 'copy' )
+   input:
+   tuple val( id ), path( results )
+   val concentration_column
+   val control_guides
 
-//    input:
-//    path fit_params 
-//    path fitted 
-//    path essentials 
+   output:
+   tuple val( id ), path( "*.png" ), emit: plots
+   path "*.log", emit: logs
 
-//    output:
-//    path "*.png"
+   script:
+   """
+   bartab plot "${results}"
+      --output bartab \
+      ${control_guides ? "--highlight control_guides" : ""} \
+      --model-type ${concentration_column ? "HillFitnessModel" : "WLS"}  \
+      --plot-format png \
+   2> bartab-plot.log
 
-//    script:
-//    """
-//    guideplot \
-//       --fitness fitness_params-guide_name-annotated.tsv \
-//       --expansion fitness_params-exp_group.tsv \
-//       --essentials ${essentials} \
-//       --essential_calls ${params.essential_call} \
-//       --essential_scores ${params.essential_score} \
-//       --fitted ${fitted} \
-//       --reference "${params.reference}" \
-//       --initial "${params.initial}" \
-//       --control_column "${params.control_column}" \
-//       --negative ${params.negative} \
-//       --count guide_count \
-//       --format TSV \
-//       -o fitness
-//    """
-// }
+   """
+}

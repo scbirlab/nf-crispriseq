@@ -15,7 +15,7 @@ process anchor_sequences {
     tuple val( id ), path( "${id}.appended.fastq.gz" ), path( "appended-dedup.fasta" )
 
     script:
-    def seq_to_append = "TGGG"  // to anchor guides of different lengths
+    def seq_to_append = "ACGT"  // to anchor guides of different lengths
     def qual_to_append = "F" * seq_to_append.length() * 2
     """
     APPEND="${seq_to_append}"
@@ -64,7 +64,7 @@ process anchor_sequences {
 }
 
 
-process count_guides_with_cutadapt {
+process Count_guides_with_cutadapt {
 
     tag "${id}" 
 
@@ -127,4 +127,31 @@ process count_guides_with_cutadapt {
     > "${id}.matched.cutadapt.log"
 
    """
+}
+
+
+process Count_guides_exact {
+
+    tag "${id}"
+    label 'big_cpu'
+
+    publishDir( 
+        "${params.outputs}/demultiplexed", 
+        mode: 'copy',
+        saveAs: { v -> "${id}.${v}" }
+    )
+
+    input:
+    tuple val( id ), path( reads ), path( guide_fasta )
+    // val allow_errors
+
+    output:
+    tuple val( id ), path( "matched.fastq.gz" ), emit: main
+    tuple val( id ), path( "unmatched.fastq.gz" ), emit: unmatched, optional: true
+    path "*.log", emit: logs
+
+    script:
+    """
+    python ${projectDir}/bin/exact_count.py "${guide_fasta}" "${reads}"
+    """
 }

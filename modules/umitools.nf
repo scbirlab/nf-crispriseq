@@ -104,7 +104,7 @@ process UMItools_extract {
       > \$(basename \$f .extracted0.fastq.gz).extracted.fastq.gz
    done
 
-   #rm "${id}"_R?.extracted0.fastq.gz
+   rm "${id}"_R?.extracted0.fastq.gz
 
    """
 }

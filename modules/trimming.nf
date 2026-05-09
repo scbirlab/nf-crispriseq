@@ -19,6 +19,9 @@ process trim_using_cutadapt {
    val trim_qual 
    val min_length
    val retain_5prime
+   val discard_missing_3prime
+   val discard_missing_5prime
+   val max_length
 
    output:
    tuple val( id ), path( "*.with-adapters.fastq.gz" ), emit: main
@@ -28,7 +31,13 @@ process trim_using_cutadapt {
    def adapter_3prime_R = (adapters3[1] ? "-A '${adapters3[1]}'" : "")
    def adapter_5prime_R = (adapters5[1] ? "-G '${adapters5[1]}'" : "")
    def adapter_5prime_F = (adapters5[0] ? "-g '${adapters5[0]}'" : "")
+   def adapter_3prime_F = (adapters3[0] ? "-a '${adapters3[0]}'" : "")
+   def discard_3 = (discard_missing_3prime ? "--discard-untrimmed": "")
+   def discard_5 = (discard_missing_5prime ? "--discard-untrimmed": "")
+   def shorted = (max_length ? "--length ${max_length}" : "")
    """
+   set -euox pipefail
+
    for i in \$(seq 1 2)
    do
       if ls */*_R"\$i"*.fastq.gz 1> /dev/null 2>&1
@@ -37,7 +46,7 @@ process trim_using_cutadapt {
       fi
    done
 
-   if [ -z "${id}_3p_R2.fastq.gz" ]
+   if [ -f "${id}_3p_R2.fastq.gz" ]
    then
       SECOND_FILE_FLAGS='-p "${id}_5p_R2.fastq.gz" ${adapter_3prime_R}'
    else
@@ -45,13 +54,13 @@ process trim_using_cutadapt {
    fi
 
    cutadapt \
-		-a "${adapters3[0]}" \
+		${adapter_3prime_F} \
       --no-indels \
       --nextseq-trim ${trim_qual} -q ${trim_qual} \
       --minimum-length ${min_length} \
 		--report full \
       --action trim \
-      --discard-untrimmed \
+      ${discard_3} \
       -j ${task.cpus} \
 		-o "${id}_5p_R1.fastq.gz" \$SECOND_FILE_FLAGS \
 		"${id}"_3p_R?.fastq.gz \
@@ -61,7 +70,7 @@ process trim_using_cutadapt {
    ADAPT5_LEN=\${#ADAPT5_ALL}
    if [ \$ADAPT5_LEN -gt 0 ]
    then
-      if [ -z "${id}_5p_R2.fastq.gz" ]
+      if [ -f "${id}_5p_R2.fastq.gz" ]
       then
          SECOND_FILE_FLAGS='-p "${id}_R2.with-adapters.fastq.gz" ${adapter_5prime_R}'
       else
@@ -72,7 +81,7 @@ process trim_using_cutadapt {
          --no-indels \
          --report full \
          --action ${retain_5prime ? "retain" : "trim"} \
-         --discard-untrimmed \
+         ${discard_5} \
          --minimum-length ${min_length} \
          -j ${task.cpus} \
          -o "${id}_R1.with-adapters.fastq.gz" \$SECOND_FILE_FLAGS \
@@ -81,14 +90,15 @@ process trim_using_cutadapt {
    else
       for i in \$(seq 1 2)
       do
-         if [ -z "${id}_5p_R\$i.fastq.gz" ]
+         if [ -f "${id}_5p_R\$i.fastq.gz" ]
          then
             mv "${id}_5p_R\$i.fastq.gz" "${id}_R\$i.with-adapters.fastq.gz"
          fi
       done
    fi
 
-   rm "${id}"_{5,3}p_R?.fastq.gz
+   rm "${id}"_?p_R?.fastq.gz
+
    """
 }
 
