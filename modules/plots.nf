@@ -33,8 +33,6 @@ process plot_count_distributions {
       )
    )
    cols = [col for col in COUNTS_COLS if col in df]
-   if len(cols) == 1:
-      cols *= 2
 
    scattergrid_args = {
       "df": df,

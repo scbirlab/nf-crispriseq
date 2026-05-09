@@ -498,15 +498,17 @@ workflow {
    if ( params.do_fitness ) {
       
       Bartab_fit(
-         stack_tables.out,
+         Stack_tables.out,
          Channel.value( file( "${params.sample_sheet}" ) ),
-         Channel.value( params.growth ? file( "${params.growth}" ) : file( "placeholder" ) ),
-         Channel.value( params.guide_name ),
+         Channel.value( params.growth_column ),
+         Channel.value( params.guide_id ),
          Channel.value( params.reference_guide ),
          Channel.value( params.use_umis ),
          Channel.value( !params.growth && params.use_spike ),
          Channel.value( params.timepoint_column ),
          Channel.value( params.concentration_column ),
+         Channel.value( params.culture_column ),
+         Channel.value( params.growth_type ),
       )
       Bartab_plot(
          Bartab_fit.out.h5ad,
