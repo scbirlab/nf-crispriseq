@@ -3,73 +3,198 @@
 ![GitHub Workflow Status (with branch)](https://img.shields.io/github/actions/workflow/status/scbirlab/nf-crispriseq/nf-test.yml)
 [![Nextflow](https://img.shields.io/badge/nextflow%20DSL2-%E2%89%A523.10.0-23aa62.svg)](https://www.nextflow.io/)
 [![run with conda](https://img.shields.io/badge/run%20with-conda-3EB049?labelColor=000000&logo=anaconda)](https://docs.conda.io/en/latest/)
+[![run with docker](https://img.shields.io/badge/run%20with-docker-0db7ed?labelColor=000000&logo=docker)](https://www.docker.com/)
+[![run with singularity](https://img.shields.io/badge/run%20with-singularity-1d355c.svg?labelColor=000000)](https://sylabs.io/docs/)
 
-**scbirlab/nf-crispriseq** is a Nextflow pipeline to count and annotate guide RNAs in demultiplexed 
-FASTQ files, optionally with UMIs, and optionally modelling fitness changes.
+**scbirlab/nf-crispriseq** is a Nextflow pipeline that takes raw FASTQ files from a CRISPRi pooled screen and returns annotated per-guide read counts — and optionally per-guide fitness scores from a time course.
 
 **Table of contents**
 
+- [Quick start](#quick-start)
+- [Worked example](#worked-example)
 - [Processing steps](#processing-steps)
 - [Requirements](#requirements)
-- [Quick start](#quick-start)
 - [Inputs](#inputs)
 - [Outputs](#outputs)
+- [Fitness calculation](#fitness-calculation)
+- [Running on a cluster](#running-on-a-cluster)
 - [Issues, problems, suggestions](#issues-problems-suggestions)
 - [Further help](#further-help)
 
+---
+
+## Quick start
+
+> 🧬 **New here?** This pipeline takes raw sequencing files from a CRISPRi pooled screen and counts how many reads in each sample match each guide RNA. With time-course data, it can also score which gene knockdowns cause growth defects.
+
+**1. Install Nextflow** (skip if already installed):
+
+```bash
+conda install -c bioconda nextflow
+```
+
+> On an HPC cluster (including the Crick), load modules instead: `module load Singularity Nextflow`
+
+**2. Create a [sample sheet](#sample-sheet)** and, optionally, a [`nextflow.config`](#inputs) in your working directory.
+
+**3. Run:**
+
+```bash
+nextflow run scbirlab/nf-crispriseq -r dev
+```
+
+First run installs dependencies from `environment.yml` (~10 min). To resume an interrupted run:
+
+```bash
+nextflow run scbirlab/nf-crispriseq -r dev -resume
+```
+
+---
+
+## Worked example
+
+This example processes a _Mycobacterium tuberculosis_ CRISPRi-seq dataset pulled directly from SRA.
+
+### Directory layout
+
+```
+my-analysis/
+├── nextflow.config
+└── inputs/
+    ├── sample-sheet.csv
+    └── guides.fasta
+```
+
+### `inputs/guides.fasta`
+
+One entry per guide RNA in the library:
+
+```
+>TargetA_guide1
+TCGACTGAGCTGAAAGAAT
+>TargetA_guide2
+GTTTAAGAGCTATGCTGGT
+>empty-vector
+AACGTTAGCTAGCGATCGA
+```
+
+Alternatively, provide a CSV with `Name` and `guide_sequence` columns — see [Guide file formats](#guide-file-formats).
+
+### `inputs/sample-sheet.csv`
+
+One row per sequencing run. All samples here use the same guide library and genome.
+
+| sample_id | expt_id | Run | genome | guides_filename | pam | scaffold | adapter_read1_5prime | adapter_read1_3prime |
+|---|---|---|---|---|---|---|---|---|
+| t0_rep1 | mtb_screen | SRRxxxxxxx | GCF_000195955.2 | guides.fasta | Sth1 | Sth1 | TGTAGCTTCTTTCGAGTACAAAAAC | CTCCCAGATTATATCTATCACTGATAGGGA |
+| t0_rep2 | mtb_screen | SRRxxxxxxx | GCF_000195955.2 | guides.fasta | Sth1 | Sth1 | TGTAGCTTCTTTCGAGTACAAAAAC | CTCCCAGATTATATCTATCACTGATAGGGA |
+| t6_rep1 | mtb_screen | SRRxxxxxxx | GCF_000195955.2 | guides.fasta | Sth1 | Sth1 | TGTAGCTTCTTTCGAGTACAAAAAC | CTCCCAGATTATATCTATCACTGATAGGGA |
+
+`expt_id` groups samples for the fitness calculation — all samples to be compared must share the same value.
+
+### `nextflow.config`
+
+```nextflow
+params {
+    sample_sheet = "inputs/sample-sheet.csv"
+    inputs       = "inputs"
+    outputs      = "outputs"
+
+    from_sra = true
+    guides   = true
+    rc       = true   // reverse complement guides before matching
+}
+```
+
+### Run
+
+```bash
+nextflow run scbirlab/nf-crispriseq -r dev -c nextflow.config
+```
+
+### Output structure
+
+```
+outputs/
+├── counts/                   # per-guide read counts, annotated with gene info
+├── counts-by-experiment/     # per-experiment stacked tables (ready for fitness)
+├── guides/                   # guide → genome GFF mappings
+├── genome/                   # reference genome + eggNOG functional annotations
+├── trimmed/                  # adapter-trimmed FASTQs
+├── demultiplexed/            # guide-assigned FASTQs
+├── plots/                    # count distribution plots
+└── multiqc/                  # HTML QC report
+```
+
+The key file for most analyses is `outputs/counts/<sample_id>.annotated.tsv`: per-guide read counts joined to gene name, locus tag, and genomic coordinates.
+
+---
+
 ## Processing steps
 
-Per genome:
+### Per genome (once per unique NCBI accession)
 
-0. If no guide RNAs are provided, generate all possible guide RNAs from the provided genome
-1. For each input set of guide RNAs, map to the reference genome and GFF to get genomic feature annotations
+1. Download genome FASTA and GFF from NCBI.
+2. Annotate protein-coding genes with COG categories using [eggNOG-mapper](https://github.com/eggnogdb/eggnog-mapper).
+3. **If `guides = false`:** design all possible guide RNAs _de novo_ with [crispio](https://crispio.readthedocs.io) for the given PAM.
+4. **If `guides = true`:** map provided guide sequences to the genome with `crispio map | crispio featurize` to assign each guide to a genomic feature.
 
-Per FASTQ file:
+### Per FASTQ file
 
-1. Filter and trim reads to adapters using `cutadapt`. This ensures reads used downstream 
-have the expected features and are trimmed so that the features are in predictable places.
-2. (Optionally) Extract UMIs using `umitools extract`.
-3. Find guide RNA matches using `cutadapt`.
-4. Count UMIs (if using) and reads per guide RNA using `umitools count_tab`.
-7. Plot histograms and correlations of UMI and read count distributions.
+1. **Trim** to adapter boundaries with `cutadapt` (quality + length filter).
+2. **Extract UMIs** (if `use_umis = true`) with `umitools extract`. Optionally whitelist clone barcodes first (`use_clone_bc = true`).
+3. **Count guides** — exact matching by default; set `allow_guide_errors = <n>` for mismatch-tolerant matching via `cutadapt`.
+4. **Count reads** (and UMIs if applicable) per guide with `umitools count_tab`.
+5. **Annotate** counts with the guide → gene table.
+6. **Stack** per-sample tables into a per-experiment table.
+7. **Plot** count distributions.
 
-Optionally [work in progress]:
+### QC
 
-8. If the data are from a time-course, calculate fitness per guide RNA, per condition.
+`fastqc` on raw reads; `multiqc` collates all logs into an HTML report.
 
-### Other steps
+### Fitness (optional)
 
-1. Get FASTQ quality metrics with `fastqc`.
-2. Compile the logs of processing steps into an HTML report with `multiqc`.
+If `do_fitness = true`, [`bartab fit`](https://github.com/scbirlab/bartab) models guide frequency change over the time course. See [Fitness calculation](#fitness-calculation).
+
+---
 
 ## Requirements
 
-### Software
+You need Nextflow ≥23.10.0. The pipeline runs in containers by default — no other software installation required.
 
-You need to have Nextflow and `conda` installed on your system.
+### On a local machine (Docker)
 
-#### First time using Nextflow?
-
-If you're at the Crick or your shared cluster has it already installed, try:
+Install [Docker](https://docs.docker.com/get-docker/) and Nextflow:
 
 ```bash
-module load Nextflow
+conda install -c bioconda nextflow
+# or: brew install nextflow
 ```
 
-Otherwise, if it's your first time using Nextflow on your system, you can install it using `conda`:
+Docker is detected automatically. The container image is pulled on first run.
+
+### On an HPC cluster (Singularity)
+
+Most HPC systems provide Nextflow and Singularity as modules. Load them before running:
 
 ```bash
-conda install -c bioconda nextflow 
+module load Singularity Nextflow
 ```
 
-You may need to set the `NXF_HOME` environment variable. For example,
+At the Crick, use the `standard` profile (see [Running on a cluster](#running-on-a-cluster)), which configures SLURM submission and Singularity automatically.
 
-```bash
-mkdir -p ~/.nextflow
-export NXF_HOME=~/.nextflow
+### Conda (alternative)
+
+If you can't use containers, the pipeline falls back to conda. Set `conda.enabled = true` in your `nextflow.config` and ensure `conda` is available:
+
+```nextflow
+conda.enabled = true
 ```
 
-To make this a permanent change, you can do something like the following:
+### Setting `NXF_HOME`
+
+If Nextflow can't write to its default cache location:
 
 ```bash
 mkdir -p ~/.nextflow
@@ -77,164 +202,274 @@ echo "export NXF_HOME=~/.nextflow" >> ~/.bash_profile
 source ~/.bash_profile
 ```
 
-## Quick start
-
-Make a [sample sheet (see below)](#sample-sheet)  and, optionally, a [`nextflow.config` file](#inputs) 
-in the directory where you want the pipeline to run. Then run Nextflow.
-
-```bash 
-nextflow run scbirlab/nf-crispriseq
-```
-
-Each time you run the pipeline after the first time, Nextflow will use a locally-cached version which 
-will not be automatically updated. If you want to ensure that you're running a version of 
-the pipeline, use the `-r <version>` flag. For example,
-
-```bash 
-nextflow run scbirlab/nf-crispriseq -r v0.0.1
-```
-
-A list of versions can be found by running `nextflow info scbirlab/nf-crispriseq`.
-
-For help, use `nextflow run scbirlab/nf-crispriseq --help`.
-
-The first time you run the pipeline on your system, the software dependencies in `environment.yml` 
-will be installed. This can take around 10 minutes.
-
-If your run is unexpectedly interrupted, you can restart from the last completed step using the `-resume` flag.
-
-```bash 
-nextflow run scbirlab/nf-crispriseq -resume
-```
+---
 
 ## Inputs
 
-The following parameters are required:
+### Parameters
 
-- `sample_sheet`: path to a CSV containing sample IDs matched with FASTQ filenames, references, 
-and adapter sequences
-- `fastq_dir`: path to directory containing the FASTQ files (optionally GZIPped)
-- `inputs`: path to directory containing files referenced in the `sample_sheet`, such as lists of guide RNAs.
+**Required:**
 
-The following parameters have default values that can be overridden if necessary.
+| Parameter | Description |
+|---|---|
+| `sample_sheet` | Path to the CSV sample sheet |
+| `fastq_dir` | Path to local FASTQ directory (not needed if `from_sra = true`) |
+| `inputs` | Directory containing guide files referenced in the sample sheet |
 
-- `output = "outputs"`: path to directory to put output files
-- `sample_names = "sample_id"`: column of `sample_sheet` to take as a sample identifier. Use `"Run"` for SRA table inputs.
-- `use_umis = false`: Whether to the reads include UMIs
-- `from_sra = false`: Whether the FASTQ files should be pulled from the SRA instead of provided as local files
-- `guides = true`: Whether the name of a CSV of guide sequences is provided in the `sample_sheet`
-- `name_column = "Name"`: If using a CSV of guide RNA sequences (`guides = true`), the column containing the name of each guide
-- `sequence_column = "guide_sequence"`: If using a CSV of guide RNA sequences (`guides = true`), the column containing the sequence of each guide
-- `rc = false`: Whether to reverse complement the guide sequences before mapping.
-- `trim_qual = 10` : For `cutadapt`, the minimum Phred score for trimming 3' calls
-- `min_length = 105` : For `cutadapt`, the minimum trimmed length of a read. Shorter reads will be discarded
+**Optional (defaults shown):**
 
-The parameters can be provided either in the `nextflow.config` file or on the `nextflow run` command.
+| Parameter | Default | Description |
+|---|---|---|
+| `outputs` | `"outputs"` | Output directory |
+| `from_sra` | `false` | Pull FASTQs from SRA |
+| `guides` | `false` | Provide a guide library; if `false`, guides are designed _de novo_ |
+| `rc` | `false` | Reverse complement guide sequences before matching |
+| `use_umis` | `false` | Reads contain UMIs |
+| `use_clone_bc` | `false` | Reads contain clone barcodes (requires `use_umis = true`) |
+| `allow_guide_errors` | `false` | Allow mismatches; set to an integer (e.g. `1`) to enable |
+| `trim_qual` | `10` | Minimum Phred score for 3′ quality trimming |
+| `min_length` | `15` | Minimum post-trimming read length |
+| `max_length` | `false` | Maximum post-trimming read length (no cap by default) |
+| `retain_5prime` | `false` | Retain rather than remove the 5′ adapter |
+| `keep_missing_3prime` | `false` | Keep reads lacking the 3′ adapter |
+| `keep_missing_5prime` | `false` | Keep reads lacking the 5′ adapter |
+| `name_column` | `"Name"` | Guide CSV column containing guide names |
+| `sequence_column` | `"guide_sequence"` | Guide CSV column containing sequences |
+| `guide_length` | `20` | Spacer length for _de novo_ guide design |
+| `do_fitness` | `false` | Run `bartab` fitness modelling |
 
-Here is an example of the `nextflow.config` file:
-
-```nextflow
-params {
-   
-    sample_sheet = "/path/to/sample-sheet.csv"
-    fastq_path = "/path/to/fastqs"
-    guides = "/path/to/reference"
-
-    // Optional
-    rc = true
-    guides = true
-    trim_qual = 15
-    min_length = 90
-
-}
-```
-
-Alternatively, you can provide these on the command line:
+Parameters can be set in `nextflow.config` or passed directly:
 
 ```bash
-nextflow run scbirlab/nf-crispriseq -r v0.0.1 \
-    --sample_sheet /path/to/sample_sheet.csv \
-    --fastq /path/to/fastqs \
-    --reference /path/to/reference \
-    --rc --guides \
+nextflow run scbirlab/nf-crispriseq -r dev \
+    --sample_sheet /path/to/sample-sheet.csv \
+    --inputs /path/to/inputs \
+    --fastq_dir /path/to/fastqs \
+    --guides --rc \
     --trim_qual 15 --min_length 90
-``` 
+```
+
+---
 
 ### Sample sheet
 
-The sample sheet is a CSV file providing information about each sample: which FASTQ files belong 
-to it, the reference genome accession number, adapters to be trimmed off, (optionally) the UMI  
-scheme, (optionally) the name of a table of known guide RNAs, and (optionally) experimental conditions if calculating fitness.
+A CSV with one row per sequencing sample.
 
-The file must have a header with the column names below, and one line per sample to be processed.
+#### Always required
 
-- `sample_id`: the unique name of the sample
-- `genome`: The [NCBI assembly accession](https://www.ncbi.nlm.nih.gov/datasets/genome/) number for the organism that the guide RNAs are targeting. This number starts with "GCF_" or "GCA_".
-- `pam`: The name (e.g. "Spy" or "Sth1") or sequence (e.g "NGG" or "NGRVAN") of the dCas9 PAM used in the experiment
-- `scaffold`: The name of the sgRNA scaffold ("PerturbSeq" or "Sth1") used in the experiment.
-The pipeline will look for files matching `<fastq_dir>/*<dir>*`, and should match **only the forward read** if you had paired-end sequencing.
-- `adapter_5prime`: the 5' adapter on the forward read to trim to in [`cutadapt` format](https://cutadapt.readthedocs.io/en/stable/guide.html#specifying-adapter-sequences). Sequence _to the left_ will be removed, but the adapters themselves will be retained.
-- `adapter_3prime`: the 3' adapter on the forward read to trim to in [`cutadapt` format](https://cutadapt.readthedocs.io/en/stable/guide.html#specifying-adapter-sequences). Sequence _**matching the adapter** and everything to the right_ will be removed.
+| Column | Description |
+|---|---|
+| `sample_id` | Unique sample identifier |
+| `expt_id` | Experiment identifier — samples sharing this value are grouped for fitness |
+| `genome` | [NCBI assembly accession](https://www.ncbi.nlm.nih.gov/datasets/genome/) (e.g. `GCF_000195955.2`) |
+| `pam` | dCas9 PAM name (`Spy`, `Sth1`) or sequence (`NGG`, `NGRVAN`) |
+| `scaffold` | sgRNA scaffold: `PerturbSeq` or `Sth1` |
+| `adapter_read1_5prime` | 5′ adapter on R1 in [cutadapt format](https://cutadapt.readthedocs.io/en/stable/guide.html#specifying-adapter-sequences). Sequence left of the adapter is removed; the adapter itself is retained. |
+| `adapter_read1_3prime` | 3′ adapter on R1. The adapter and everything to its right is removed. |
 
-If you have set `from_sra = false` (the default):
-- `reads`: the search glob to find FASTQ files for each sample in `fastq_dir` (see [config](#inputs)). 
-Otherwise with `from_sra = true`:
-- `Run`: the SRA Run ID
+#### If using local FASTQs (`from_sra = false`, the default)
 
-If you have set `use_umis = true` (the default):
-- `umi_pattern`: the cell barcode and UMI pattern in [`umitools` regex format](https://umi-tools.readthedocs.io/en/latest/regex.html#regex-regular-expression-mode) for the forward read
+| Column | Description |
+|---|---|
+| `reads` | Glob matching FASTQ file(s) in `fastq_dir`; for paired-end data, match **only R1** |
 
-If you have set `guides = true` (the default):
-- `guides_filename`: the name of a file in the inputs directory containing guide sequences. 
+#### If pulling from SRA (`from_sra = true`)
 
-Here is an example of the sample sheet:
+| Column | Description |
+|---|---|
+| `Run` | SRA Run accession |
 
-| sample_id | genome          | reads           | guides_filename | pam  | scaffold   | adapter_5prime           | adapter_3prime     | umi_pattern                             | 
-| --------- | --------------- | --------------- | --------------- | ---- | ---------- | ------------------------ | ------------------ | --------------------------------------- |  
-| lib001    | GCA_003076915.1 | FAU6865A42_*_R1 | guides.csv      | Spy  | PerturbSeq | ^N{8}TCGACTGAGCTGAAAGAAT | GTTTAAGAGCTATGCTGG | ^(?P<umi_1>.{8})(?P<discard_1>.{86}).+$ | 
-| lib002    | GCA_003076915.1 | FAU6865A43_*_R1 | guides.csv      | Spy  | PerturbSeq | ^N{8}TCGACTGAGCTGAAAGAAT | GTTTAAGAGCTATGCTGG | ^(?P<umi_1>.{8})(?P<discard_1>.{86}).+$ | 
+#### If using paired-end reads
 
-And here is an example of the `guides_filename` (`guides.csv` in this example):
+| Column | Description |
+|---|---|
+| `adapter_read2_5prime` | 5′ adapter on R2 |
+| `adapter_read2_3prime` | 3′ adapter on R2 |
 
-| Name       | guide_sequence      |
-| ---------- | ------------------- |
-| guide001   | TCGACTGAGCTGAAAGAAT |
-| guide002   | GTTTAAGAGCTATGCTGGT |
+#### If using UMIs (`use_umis = true`)
 
-It is also possible to provide the guides as a fasta file:
+| Column | Description |
+|---|---|
+| `umi_read1` | [umitools regex pattern](https://umi-tools.readthedocs.io/en/latest/regex.html) for UMI on R1 |
+| `umi_read2` | umitools regex pattern for UMI on R2 (if applicable) |
+
+#### If providing a guide library (`guides = true`)
+
+| Column | Description |
+|---|---|
+| `guides_filename` | Filename of a guide CSV or FASTA inside `inputs` |
+
+#### Example: SRA, single-end, no UMIs
+
+| sample_id | expt_id | Run | genome | guides_filename | pam | scaffold | adapter_read1_5prime | adapter_read1_3prime |
+|---|---|---|---|---|---|---|---|---|
+| t0_rep1 | screen1 | SRRxxxxxxx | GCF_000195955.2 | guides.fasta | Sth1 | Sth1 | TGTAGCTTCTTTCGAGTACAAAAAC | CTCCCAGATTATATCTATCACTGATAGGGA |
+| t6_rep1 | screen1 | SRRxxxxxxx | GCF_000195955.2 | guides.fasta | Sth1 | Sth1 | TGTAGCTTCTTTCGAGTACAAAAAC | CTCCCAGATTATATCTATCACTGATAGGGA |
+
+#### Example: local FASTQs, paired-end, with UMIs
+
+| sample_id | expt_id | reads | genome | guides_filename | pam | scaffold | adapter_read1_5prime | adapter_read1_3prime | umi_read1 |
+|---|---|---|---|---|---|---|---|---|---|
+| lib001 | screen2 | `FAU6865A42_*_R1` | GCA_003076915.1 | guides.csv | Spy | PerturbSeq | `^N{8}TCGACTGAGCTGAAAGAAT` | GTTTAAGAGCTATGCTGG | `^(?P<umi_1>.{8})(?P<discard_1>.{86}).+$` |
+
+---
+
+### Guide file formats
+
+**CSV:**
+
+| Name | guide_sequence |
+|---|---|
+| TargetA_guide1 | TCGACTGAGCTGAAAGAAT |
+| TargetA_guide2 | GTTTAAGAGCTATGCTGGT |
+
+**FASTA:**
 
 ```
->guide001
+>TargetA_guide1
 TCGACTGAGCTGAAAGAAT
->guide002
+>TargetA_guide2
 GTTTAAGAGCTATGCTGGT
 ```
 
-You don't need to provide gene anntotation infomation, because the pipeline will map these guides back to the genome and annotate the features for you.
+Column names in the CSV can be changed with `name_column` and `sequence_column`. The pipeline maps guides to the genome and annotates targeted genes automatically — no need to provide coordinates.
+
+### _De novo_ guide design
+
+With `guides = false`, the pipeline uses [crispio](https://crispio.readthedocs.io) to design all possible guide RNAs for the given genome and PAM. Set `guide_length` (default 20 nt) to control spacer length.
+
+---
 
 ## Outputs
 
-Outputs are saved in the `output` defined in the [config file](#inputs). They are organised under 
-three directories:
+| Path | Contents |
+|---|---|
+| `counts/<sample_id>.annotated.tsv` | Per-guide read counts joined to gene name, locus tag, coordinates |
+| `counts-by-experiment/<expt_id>.counts.tsv.gz` | All samples in an experiment stacked into one table |
+| `guides/` | Guide → genome GFF mappings |
+| `genome/` | Reference genome FASTA/GFF + eggNOG annotations |
+| `trimmed/` | Trimmed FASTQs and cutadapt logs |
+| `demultiplexed/` | Guide-assigned FASTQs |
+| `plots/` | Count distribution histograms and correlations |
+| `fitness/` | Fitness scores and plots (only with `do_fitness = true`) |
+| `multiqc/` | HTML QC report |
 
-- `processed`: FASTQ files and logs resulting from trimming and UMI extraction
-- `mapped`: FASTQ files and logs resulting mapping features
-- `counts`: tables and plots relating to UMI and read counts
-- `multiqc`: HTML report on processing steps
+---
+
+## Fitness calculation
+
+Set `do_fitness = true` to run [`bartab fit`](https://github.com/scbirlab/bartab) on the stacked count table for each experiment.
+
+### Model types
+
+Two models are available, selected automatically:
+
+- **WLS** (default) — weighted least-squares fit to guide frequency over time.
+- **HillFitnessModel** — dose-response model for concentration series; activated when `concentration_column` is set.
+
+Normalisation uses either a reference guide (specified by `reference_guide`) or a spike-in (`use_spike = true`).
+
+### Additional sample sheet columns for fitness
+
+| Column | Description |
+|---|---|
+| `timepoint` | Numeric timepoint (generations, hours, etc.). Column name set by `timepoint_column`. |
+| `culture_id` | Replicate culture identifier. Column name set by `culture_column`. |
+
+### Fitness parameters
+
+| Parameter | Default | Description |
+|---|---|---|
+| `reference_guide` | `"empty-vector"` | Name prefix of control guides for normalisation |
+| `timepoint_column` | `"timepoint"` | Sample sheet column with timepoint values |
+| `culture_column` | `"culture_id"` | Sample sheet column identifying replicate cultures |
+| `concentration_column` | `false` | Column with drug concentrations (activates HillFitnessModel) |
+| `growth_column` | — | Column with growth measurements (OD, CFU) |
+| `growth_type` | `"density"` | `"density"` or `"generations"` |
+| `use_spike` | `false` | Normalise by spike-in instead of reference guide |
+
+### Example config with fitness
+
+```nextflow
+params {
+    sample_sheet = "inputs/sample-sheet.csv"
+    inputs       = "inputs"
+    outputs      = "outputs"
+    from_sra     = true
+    guides       = true
+    rc           = true
+
+    do_fitness       = true
+    reference_guide  = "empty-vector"
+    timepoint_column = "generations"
+    culture_column   = "replicate"
+    growth_type      = "generations"
+}
+```
+
+### Fitness outputs
+
+| File | Description |
+|---|---|
+| `fitness/<expt_id>.bartab.h5ad` | Full results in AnnData format |
+| `fitness/<expt_id>.bartab.csv` | Per-guide fitness parameters as a flat CSV |
+| `fitness/plots/` | Fitness score plots |
+
+---
+
+## Running on a cluster
+
+Load the required modules, then use the `standard` profile, which configures SLURM submission and Singularity automatically:
+
+```bash
+module load Singularity Nextflow
+nextflow run scbirlab/nf-crispriseq -r dev -profile standard -c nextflow.config
+```
+
+The `standard` profile also enables email notification on completion (to `$USER@crick.ac.uk`) and writes a DAG of the pipeline graph.
+
+Default resource allocations by process label:
+
+| Label | CPUs | Memory | Time |
+|---|---|---|---|
+| (default) | 1 | 8 GB | 12 h |
+| `big_cpu` | 16 | 16 GB | 12 h |
+| `big_time` | 1 | 16 GB | 4 days |
+| `med_mem` | 1 | 64 GB | 12 h |
+| `big_mem` | 16 | 128 GB | 12 h |
+
+Override in your `nextflow.config`:
+
+```nextflow
+process {
+    withLabel: big_time {
+        time   = '7d'
+        memory = 32.GB
+    }
+}
+```
+
+To run locally (e.g. for testing with Docker):
+
+```bash
+nextflow run scbirlab/nf-crispriseq -r dev -profile local -c nextflow.config
+```
+
+---
 
 ## Issues, problems, suggestions
 
 Add to the [issue tracker](https://www.github.com/scbirlab/nf-crispriseq/issues).
 
+---
+
 ## Further help
 
-Here are the help pages of the software used by this pipeline.
-
-- [crispio](https://crispio.readthedocs.io/en/stable/index.html)
-- [cutadapt](https://cutadapt.readthedocs.io/en/stable/index.html)
+- [bartab](https://github.com/scbirlab/bartab) — fitness modelling
+- [crispio](https://crispio.readthedocs.io/en/stable/index.html) — guide design and genome mapping
+- [cutadapt](https://cutadapt.readthedocs.io/en/stable/index.html) — adapter trimming
+- [eggNOG-mapper](https://github.com/eggnogdb/eggnog-mapper) — functional annotation
 - [fastqc](https://www.bioinformatics.babraham.ac.uk/projects/fastqc/)
 - [multiqc](https://multiqc.info/)
 - [nextflow](https://www.nextflow.io/docs/latest/index.html)
-- [python](https://www.python.org/doc/)
-- [matplotlib](https://matplotlib.org/stable/)
 - [umi-tools](https://umi-tools.readthedocs.io/en/latest/index.html)
