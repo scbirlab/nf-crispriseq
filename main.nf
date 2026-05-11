@@ -67,10 +67,24 @@ if ( !params.from_sra ) {
     if ( !file(params.fastq_dir).isDirectory() )
         error "fastq_dir does not exist or is not a directory: ${params.fastq_dir}"
 }
+if ( params.use_clone_bc && !params.use_umis )
+    error "use_clone_bc = true requires use_umis = true"
 
 def valid_growth_types = ["density", "generations"]
 if ( params.do_fitness && !valid_growth_types.contains(params.growth_type) )
     error "growth_type must be one of ${valid_growth_types}, got: ${params.growth_type}"
+if ( params.do_fitness && !params.growth_column && !params.use_spike )
+    error "do_fitness = true requires either growth_column or use_spike = true"
+if ( params.allow_guide_errors != false && !(params.allow_guide_errors instanceof Integer) )
+    error "allow_guide_errors must be an integer (number of mismatches), not a boolean"
+if ( params.max_length && params.max_length <= params.min_length )
+    error "max_length (${params.max_length}) must be greater than min_length (${params.min_length})"
+if ( params.guides && !file(params.inputs).isDirectory() )
+    error "inputs directory does not exist: ${params.inputs}"
+
+def valid_umi_methods = ["unique", "percentile", "cluster", "adjacency", "directional"]
+if ( params.use_umis && !valid_umi_methods.contains(params.umi_method) )
+    error "umi_method must be one of ${valid_umi_methods}, got: ${params.umi_method}"
 
 log.info pipeline_title + """\
    inputs
