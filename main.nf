@@ -544,6 +544,7 @@ workflow {
          Channel.value( params.timepoint_column ),
          Channel.value( params.concentration_column ),
          Channel.value( params.culture_column ),
+         Channel.value( params.volume_column ),
          Channel.value( params.growth_type ),
       )
       Bartab_plot(

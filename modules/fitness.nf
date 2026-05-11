@@ -20,6 +20,7 @@ process Bartab_fit {
    val timepoint_column
    val concentration_column
    val culture_column
+   val volume_column
    val growth_type
 
    output:
@@ -50,14 +51,15 @@ process Bartab_fit {
    bartab fit "counts_deduped.tsv.gz" \
       --sample-sheet "${sample_sheet}" \
       --barcode-sheet strain-meta.csv \
-      --reference "${reference_guide}" \
-      --spike-name spike \
-      ${use_spike ? "--use-spike" : "--growth-column ${growth} --growth-type ${growth_type}"} \
       --barcode-column "${guide_name}" \
+      --reference "${reference_guide}" \
       --sample-column sample_id \
       --culture-column ${culture_column} \
       --count-column ${use_umis ? "umi_count" : "read_count"} \
       --timepoint-column "${timepoint_column}" \
+      --spike-name spike \
+      ${use_spike ? "--use-spike" : "--growth-column ${growth} --growth-type ${growth_type}"} \
+      ${volume_column ? "--volume-column ${volume_column}" : ""} \
       ${concentration_column ? "--concentration-column ${concentration_column} --model-type HillFitnessModel" : "--model-type WLS"} \
       --output bartab.h5ad \
    2> >(tee fitness.log >&2)

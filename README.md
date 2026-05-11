@@ -6,7 +6,7 @@
 [![run with docker](https://img.shields.io/badge/run%20with-docker-0db7ed?labelColor=000000&logo=docker)](https://www.docker.com/)
 [![run with singularity](https://img.shields.io/badge/run%20with-singularity-1d355c.svg?labelColor=000000)](https://sylabs.io/docs/)
 
-**scbirlab/nf-crispriseq** is a Nextflow pipeline that takes raw FASTQ files from a CRISPRi pooled screen and returns annotated per-guide read counts — and optionally per-guide fitness scores from a time course.
+**scbirlab/nf-crispriseq** is a Nextflow pipeline that takes raw FASTQ files from a CRISPRi pooled screen and returns annotated per-guide read counts: and optionally per-guide fitness scores from a time course.
 
 **Table of contents**
 
@@ -78,7 +78,7 @@ GTTTAAGAGCTATGCTGGT
 AACGTTAGCTAGCGATCGA
 ```
 
-Alternatively, provide a CSV with `Name` and `guide_sequence` columns — see [Guide file formats](#guide-file-formats).
+Alternatively, provide a CSV with `Name` and `guide_sequence` columns: see [Guide file formats](#guide-file-formats).
 
 ### `inputs/sample-sheet.csv`
 
@@ -90,7 +90,7 @@ One row per sequencing run. All samples here use the same guide library and geno
 | t0_rep2 | mtb_screen | SRRxxxxxxx | GCF_000195955.2 | guides.fasta | Sth1 | Sth1 | TGTAGCTTCTTTCGAGTACAAAAAC | CTCCCAGATTATATCTATCACTGATAGGGA |
 | t6_rep1 | mtb_screen | SRRxxxxxxx | GCF_000195955.2 | guides.fasta | Sth1 | Sth1 | TGTAGCTTCTTTCGAGTACAAAAAC | CTCCCAGATTATATCTATCACTGATAGGGA |
 
-`expt_id` groups samples for the fitness calculation — all samples to be compared must share the same value.
+`expt_id` groups samples for the fitness calculation: all samples to be compared must share the same value.
 
 ### `nextflow.config`
 
@@ -143,7 +143,7 @@ The key file for most analyses is `outputs/counts/<sample_id>.annotated.tsv`: pe
 
 1. **Trim** to adapter boundaries with `cutadapt` (quality + length filter).
 2. **Extract UMIs** (if `use_umis = true`) with `umitools extract`. Optionally whitelist clone barcodes first (`use_clone_bc = true`).
-3. **Count guides** — exact matching by default; set `allow_guide_errors = <n>` for mismatch-tolerant matching via `cutadapt`.
+3. **Count guides**: exact matching by default; set `allow_guide_errors = <n>` for mismatch-tolerant matching via `cutadapt`.
 4. **Count reads** (and UMIs if applicable) per guide with `umitools count_tab`.
 5. **Annotate** counts with the guide → gene table.
 6. **Stack** per-sample tables into a per-experiment table.
@@ -161,7 +161,7 @@ If `do_fitness = true`, [`bartab fit`](https://github.com/scbirlab/bartab) model
 
 ## Requirements
 
-You need Nextflow ≥23.10.0. The pipeline runs in containers by default — no other software installation required.
+You need Nextflow ≥23.10.0. The pipeline runs in containers by default: no other software installation required.
 
 ### On a local machine (Docker)
 
@@ -261,7 +261,7 @@ A CSV with one row per sequencing sample.
 | Column | Description |
 |---|---|
 | `sample_id` | Unique sample identifier |
-| `expt_id` | Experiment identifier — samples sharing this value are grouped for fitness. **Required**: the pipeline will error on any row missing this value. |
+| `expt_id` | Experiment identifier: samples sharing this value are grouped for fitness. **Required**: the pipeline will error on any row missing this value. |
 | `genome` | [NCBI assembly accession](https://www.ncbi.nlm.nih.gov/datasets/genome/) (e.g. `GCF_000195955.2`) |
 | `pam` | dCas9 PAM name (`Spy`, `Sth1`) or sequence (`NGG`, `NGRVAN`) |
 | `scaffold` | sgRNA scaffold: `PerturbSeq` or `Sth1` |
@@ -326,7 +326,7 @@ Three formats are accepted:
 | TargetA_guide1 | TCGACTGAGCTGAAAGAAT |
 | TargetA_guide2 | GTTTAAGAGCTATGCTGGT |
 
-**TSV** (`.tsv` or `.txt`) — same structure, tab-separated.
+**TSV** (`.tsv` or `.txt`): same structure, tab-separated.
 
 **FASTA** (any other extension):
 
@@ -337,7 +337,7 @@ TCGACTGAGCTGAAAGAAT
 GTTTAAGAGCTATGCTGGT
 ```
 
-Column names in the CSV/TSV can be changed with `name_column` and `sequence_column`. The pipeline maps guides to the genome and annotates targeted genes automatically — no need to provide coordinates.
+Column names in the CSV/TSV can be changed with `name_column` and `sequence_column`. The pipeline maps guides to the genome and annotates targeted genes automatically: no need to provide coordinates.
 
 ### _De novo_ guide design
 
@@ -369,8 +369,8 @@ Set `do_fitness = true` to run [`bartab fit`](https://github.com/scbirlab/bartab
 
 Two models are available, selected automatically:
 
-- **WLS** (default) — weighted least-squares fit to guide frequency over time.
-- **HillFitnessModel** — dose-response model for concentration series; activated when `concentration_column` is set.
+- **WLS** (default): weighted least-squares fit to guide frequency over time.
+- **HillFitnessModel**: dose-response model for concentration series; activated when `concentration_column` is set.
 
 Normalisation uses either an external growth measurement supplied via `growth_column` (e.g. OD readings or generation counts from the sample sheet) or the read frequency of spike-in guides (`use_spike = true`). The `reference_guide` parameter specifies non-targeting control guides used to compute relative fitness after normalisation.
 
@@ -389,10 +389,11 @@ Normalisation uses either an external growth measurement supplied via `growth_co
 | `timepoint_column` | `"timepoint"` | Sample sheet column with timepoint values |
 | `culture_column` | `"culture_id"` | Sample sheet column identifying replicate cultures |
 | `concentration_column` | `false` | Column with drug concentrations (activates HillFitnessModel) |
-| `growth_column` | — | Sample sheet column containing growth measurements (OD, CFU, etc.) for normalisation |
+| `growth_column` | -- | Sample sheet column containing growth measurements (OD, CFU, etc.) for normalisation |
 | `growth` | `false` | Path to a separate TSV file mapping timepoints to growth measurements (alternative to `growth_column`) |
 | `growth_type` | `"density"` | Units of the growth measurement: `"density"` (e.g. OD) or `"generations"` |
 | `use_spike` | `false` | Normalise by spike-in guide frequency instead of a growth measurement. Only applied if `growth` is not set. |
+| `volume_column` | -- | Sample sheet column containing sample volume. Used for spike-based normalisation when different volumes were taken for each sample. |
 | `negative` | `"ctrl_"` | Name prefix of negative/non-targeting control guides; shown distinctively in plots |
 | `highlight_guides` | `false` | Comma-separated list of guide names to highlight in fitness plots |
 
@@ -476,10 +477,10 @@ Add to the [issue tracker](https://www.github.com/scbirlab/nf-crispriseq/issues)
 
 ## Further help
 
-- [bartab](https://github.com/scbirlab/bartab) — fitness modelling
-- [crispio](https://crispio.readthedocs.io/en/stable/index.html) — guide design and genome mapping
-- [cutadapt](https://cutadapt.readthedocs.io/en/stable/index.html) — adapter trimming
-- [eggNOG-mapper](https://github.com/eggnogdb/eggnog-mapper) — functional annotation
+- [bartab](https://github.com/scbirlab/bartab): fitness modelling
+- [crispio](https://crispio.readthedocs.io/en/stable/index.html): guide design and genome mapping
+- [cutadapt](https://cutadapt.readthedocs.io/en/stable/index.html): adapter trimming
+- [eggNOG-mapper](https://github.com/eggnogdb/eggnog-mapper): functional annotation
 - [fastqc](https://www.bioinformatics.babraham.ac.uk/projects/fastqc/)
 - [multiqc](https://multiqc.info/)
 - [nextflow](https://www.nextflow.io/docs/latest/index.html)
