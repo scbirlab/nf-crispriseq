@@ -7,12 +7,18 @@ channels:
 dependencies:
     - python=3.11
     - pip
+    - bioconda::eggnog-mapper>=2.1.13
     - bioconda::fastqc
+    - bioconda::perl-uri
     - bioconda::seqtk
     - bioconda::sra-tools
+    - bioconda::umi_tools=1.1.6
+    - conda-forge::git
+    - conda-forge::pigz
+    - conda-forge::unzip
     - pip:
-        - "git+https://github.com/scbirlab/crispio.git@fitness#egg=crispio[fit_cuda_local]"
-        - 'carabiner-tools[mpl,pd]==0.0.3.post1'
-        - 'cutadapt==5.0'
-        - 'multiqc==1.21'
-        - 'umi-tools==1.1.6'
+        - "bartab>=0.0.10.post1"
+        - "crispio>=0.0.6"
+        - 'carabiner-tools[mpl,pd]>=0.0.5.post3'
+        - 'cutadapt>=5.0'
+        - 'multiqc>=1.27'
