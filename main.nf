@@ -59,13 +59,18 @@ if ( params.help ) {
 */
 
 if ( !params.sample_sheet ) {
-   throw new Exception("!!! PARAMETER MISSING: Please provide a path to sample_sheet")
+   error "!!! PARAMETER MISSING: Please provide a path to sample_sheet"
 }
 if ( !params.from_sra ) {
-   if ( !params.fastq_dir ) {
-      throw new Exception("!!! PARAMETER MISSING: Please provide a path to fastq_dir")
-   }
+    if ( !params.fastq_dir ) 
+        error "fastq_dir is required when from_sra = false"
+    if ( !file(params.fastq_dir).isDirectory() )
+        error "fastq_dir does not exist or is not a directory: ${params.fastq_dir}"
 }
+
+def valid_growth_types = ["density", "generations"]
+if ( params.do_fitness && !valid_growth_types.contains(params.growth_type) )
+    error "growth_type must be one of ${valid_growth_types}, got: ${params.growth_type}"
 
 log.info pipeline_title + """\
    inputs
@@ -165,9 +170,13 @@ workflow {
       .set { adapter_ch }  // sample_name, [adapt5], [adapt3]
 
    csv_ch
-      .map { tuple(
-         it.sample_id,
-         it.expt_id, 
+      .map { row ->
+         if ( !row.expt_id ) error "Missing expt_id for sample: ${row.sample_id}"
+         row
+      }
+      .map { row -> tuple(
+         row.sample_id,
+         row.expt_id, 
       ) }
       .unique()
       .set { sample2expt }  // sample_name, expt_id
@@ -513,7 +522,8 @@ workflow {
       Bartab_plot(
          Bartab_fit.out.h5ad,
          Channel.value( params.concentration_column ),
-         Channel.value( params.reference_guide ),
+         Channel.value( params.negative ),
+         Channel.value( params.highlight_guides ),
       )
       // JOIN_GFF(calculate_relative_fitness.out.table, gff_table)
       // PLOT_FITNESS(JOIN_GFF.out, essential_ch)
