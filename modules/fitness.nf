@@ -68,6 +68,7 @@ process Bartab_fit {
 process Bartab_plot {
 
    tag "${id}"
+   label 'big_time'
 
    publishDir(
       "${params.outputs}/fitness/plots", 
@@ -79,6 +80,7 @@ process Bartab_plot {
    tuple val( id ), path( results )
    val concentration_column
    val control_guides
+   val highlight_guides
 
    output:
    tuple val( id ), path( "*.png" ), emit: plots
@@ -88,7 +90,8 @@ process Bartab_plot {
    """
    bartab plot "${results}" \
       --output bartab \
-      ${control_guides ? "--highlight ${control_guides}" : ""} \
+      ${control_guides ? "--control ${control_guides}" : ""} \
+      ${highlight_guides ? "--highlight ${highlight_guides}" : ""} \
       --model-type ${concentration_column ? "HillFitnessModel" : "WLS"}  \
       --plot-format png \
    2> >(tee bartab-plot.log >&2)
