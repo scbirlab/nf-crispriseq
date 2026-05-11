@@ -135,7 +135,7 @@ The key file for most analyses is `outputs/counts/<sample_id>.annotated.tsv`: pe
 ### Per genome (once per unique NCBI accession)
 
 1. Download genome FASTA and GFF from NCBI.
-2. Annotate protein-coding genes with COG categories using [eggNOG-mapper](https://github.com/eggnogdb/eggnog-mapper).
+2. **If `use_eggnog = true`:** annotate protein-coding genes with COG categories using [eggNOG-mapper](https://github.com/eggnogdb/eggnog-mapper). Skipped by default as it requires downloading the eggNOG database (~GB-scale).
 3. **If `guides = false`:** design all possible guide RNAs _de novo_ with [crispio](https://crispio.readthedocs.io) for the given PAM.
 4. **If `guides = true`:** map provided guide sequences to the genome with `crispio map | crispio featurize` to assign each guide to a genomic feature.
 
@@ -223,6 +223,7 @@ source ~/.bash_profile
 | `outputs` | `"outputs"` | Output directory |
 | `from_sra` | `false` | Pull FASTQs from SRA |
 | `guides` | `false` | Provide a guide library; if `false`, guides are designed _de novo_ |
+| `use_eggnog` | `false` | Run eggNOG-mapper to annotate genome with COG categories (requires large DB download) |
 | `rc` | `false` | Reverse complement guide sequences before matching |
 | `use_umis` | `false` | Reads contain UMIs |
 | `use_clone_bc` | `false` | Reads contain clone barcodes (requires `use_umis = true`) |
@@ -351,7 +352,7 @@ With `guides = false`, the pipeline uses [crispio](https://crispio.readthedocs.i
 | `counts/<sample_id>.annotated.tsv` | Per-guide read counts joined to gene name, locus tag, coordinates |
 | `counts-by-experiment/<expt_id>.counts.tsv.gz` | All samples in an experiment stacked into one table |
 | `guides/` | Guide → genome GFF mappings |
-| `genome/` | Reference genome FASTA/GFF + eggNOG annotations |
+| `genome/` | Reference genome FASTA/GFF; eggNOG annotations if `use_eggnog = true` |
 | `trimmed/` | Trimmed FASTQs and cutadapt logs |
 | `demultiplexed/` | Guide-assigned FASTQs |
 | `plots/` | Count distribution histograms and correlations |
