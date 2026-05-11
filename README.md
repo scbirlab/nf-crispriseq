@@ -260,7 +260,7 @@ A CSV with one row per sequencing sample.
 | Column | Description |
 |---|---|
 | `sample_id` | Unique sample identifier |
-| `expt_id` | Experiment identifier — samples sharing this value are grouped for fitness |
+| `expt_id` | Experiment identifier — samples sharing this value are grouped for fitness. **Required**: the pipeline will error on any row missing this value. |
 | `genome` | [NCBI assembly accession](https://www.ncbi.nlm.nih.gov/datasets/genome/) (e.g. `GCF_000195955.2`) |
 | `pam` | dCas9 PAM name (`Spy`, `Sth1`) or sequence (`NGG`, `NGRVAN`) |
 | `scaffold` | sgRNA scaffold: `PerturbSeq` or `Sth1` |
@@ -316,14 +316,18 @@ A CSV with one row per sequencing sample.
 
 ### Guide file formats
 
-**CSV:**
+Three formats are accepted:
+
+**CSV** (`.csv`):
 
 | Name | guide_sequence |
 |---|---|
 | TargetA_guide1 | TCGACTGAGCTGAAAGAAT |
 | TargetA_guide2 | GTTTAAGAGCTATGCTGGT |
 
-**FASTA:**
+**TSV** (`.tsv` or `.txt`) — same structure, tab-separated.
+
+**FASTA** (any other extension):
 
 ```
 >TargetA_guide1
@@ -332,7 +336,7 @@ TCGACTGAGCTGAAAGAAT
 GTTTAAGAGCTATGCTGGT
 ```
 
-Column names in the CSV can be changed with `name_column` and `sequence_column`. The pipeline maps guides to the genome and annotates targeted genes automatically — no need to provide coordinates.
+Column names in the CSV/TSV can be changed with `name_column` and `sequence_column`. The pipeline maps guides to the genome and annotates targeted genes automatically — no need to provide coordinates.
 
 ### _De novo_ guide design
 
@@ -387,6 +391,8 @@ Normalisation uses either a reference guide (specified by `reference_guide`) or 
 | `growth_column` | — | Column with growth measurements (OD, CFU) |
 | `growth_type` | `"density"` | `"density"` or `"generations"` |
 | `use_spike` | `false` | Normalise by spike-in instead of reference guide |
+| `negative` | `"ctrl_"` | Name prefix of negative/non-targeting control guides; shown distinctively in plots |
+| `highlight_guides` | `false` | Comma-separated list of guide names to highlight in fitness plots |
 
 ### Example config with fitness
 
