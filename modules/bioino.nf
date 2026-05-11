@@ -23,7 +23,22 @@ process table2fasta {
       bioino table2fasta "${table}" \
          --sequence "${sequence_column}" \
          --format CSV \
-         --name "${name_column}" \
+         --name ${name_column} \
+         --output to-map.fasta
+      """
+   else if ( table.getExtension() == "tsv" || table.getExtension() == "txt" )
+      """
+      python -c '
+      import pandas as pd
+      (
+         pd.read_csv("${table}", sep="\\t")
+         .to_csv("guides.csv", index=False)
+      )
+      '
+      bioino table2fasta "guides.csv" \
+         --sequence "${sequence_column}" \
+         --format CSV \
+         --name ${name_column} \
          --output to-map.fasta
       """
    else
