@@ -213,8 +213,8 @@ source ~/.bash_profile
 | Parameter | Description |
 |---|---|
 | `sample_sheet` | Path to the CSV sample sheet |
-| `fastq_dir` | Path to local FASTQ directory (not needed if `from_sra = true`) |
 | `inputs` | Directory containing guide files referenced in the sample sheet |
+| `fastq_dir` | Path to local FASTQ directory. Required when `from_sra = false` (the default); omit if `from_sra = true`. |
 
 **Optional (defaults shown):**
 
@@ -272,7 +272,7 @@ A CSV with one row per sequencing sample.
 
 | Column | Description |
 |---|---|
-| `reads` | Glob matching FASTQ file(s) in `fastq_dir`; for paired-end data, match **only R1** |
+| `reads` | A substring of the FASTQ filename(s) in `fastq_dir`. The pipeline matches files as `*<reads>*`, so provide a unique fragment of the filename (e.g. a sample name or barcode), not a full glob. For paired-end data, the pattern should match **only R1**. |
 
 #### If pulling from SRA (`from_sra = true`)
 
@@ -372,7 +372,7 @@ Two models are available, selected automatically:
 - **WLS** (default) — weighted least-squares fit to guide frequency over time.
 - **HillFitnessModel** — dose-response model for concentration series; activated when `concentration_column` is set.
 
-Normalisation uses either a reference guide (specified by `reference_guide`) or a spike-in (`use_spike = true`).
+Normalisation uses either an external growth measurement supplied via `growth_column` (e.g. OD readings or generation counts from the sample sheet) or the read frequency of spike-in guides (`use_spike = true`). The `reference_guide` parameter specifies non-targeting control guides used to compute relative fitness after normalisation.
 
 ### Additional sample sheet columns for fitness
 
@@ -385,13 +385,14 @@ Normalisation uses either a reference guide (specified by `reference_guide`) or 
 
 | Parameter | Default | Description |
 |---|---|---|
-| `reference_guide` | `"empty-vector"` | Name prefix of control guides for normalisation |
+| `reference_guide` | `"empty-vector"` | Name prefix of non-targeting control guides; used to compute relative fitness after normalisation |
 | `timepoint_column` | `"timepoint"` | Sample sheet column with timepoint values |
 | `culture_column` | `"culture_id"` | Sample sheet column identifying replicate cultures |
 | `concentration_column` | `false` | Column with drug concentrations (activates HillFitnessModel) |
-| `growth_column` | — | Column with growth measurements (OD, CFU) |
-| `growth_type` | `"density"` | `"density"` or `"generations"` |
-| `use_spike` | `false` | Normalise by spike-in instead of reference guide |
+| `growth_column` | — | Sample sheet column containing growth measurements (OD, CFU, etc.) for normalisation |
+| `growth` | `false` | Path to a separate TSV file mapping timepoints to growth measurements (alternative to `growth_column`) |
+| `growth_type` | `"density"` | Units of the growth measurement: `"density"` (e.g. OD) or `"generations"` |
+| `use_spike` | `false` | Normalise by spike-in guide frequency instead of a growth measurement. Only applied if `growth` is not set. |
 | `negative` | `"ctrl_"` | Name prefix of negative/non-targeting control guides; shown distinctively in plots |
 | `highlight_guides` | `false` | Comma-separated list of guide names to highlight in fitness plots |
 
@@ -442,8 +443,11 @@ Default resource allocations by process label:
 | (default) | 1 | 8 GB | 12 h |
 | `big_cpu` | 16 | 16 GB | 12 h |
 | `big_time` | 1 | 16 GB | 4 days |
+| `some_mem` | 1 | 16 GB | 12 h |
 | `med_mem` | 1 | 64 GB | 12 h |
 | `big_mem` | 16 | 128 GB | 12 h |
+| `gpu` | 2 | 128 GB | 4 h |
+| `gpu_single` | 2 | 128 GB | 7 days |
 
 Override in your `nextflow.config`:
 

@@ -20,7 +20,7 @@ process design_guides_with_crispio {
    script:
    """
    set -euox pipefail
-   
+
    crispio generate "${genome}" \
       --annotations "${gff}" \
       --pam ${pam} \
@@ -65,13 +65,16 @@ process map_guides_to_genome_features {
       --genome "${genome_fasta}" \
       --annotations "${gff}" \
       --pam "${pam}" \
+      --output mapped0.gff \
    2> >(tee map.log >&2) \
-   | crispio featurize \
-      --scaffold "${scaffold}" \
-   > mapped.gff
 
-   n_lines=\$(grep -v ^# mapped.gff | wc -l)
-   if [ "\$n_lines" -eq 0 ]
+   crispio featurize mapped0.gff \
+      --scaffold "${scaffold}" \
+      --output mapped.gff \
+   2> >(tee featurize.log >&2) \
+
+   n_lines=\$(grep -v -c '^#' mapped.gff)
+   if [ "\$n_lines" -lt 2 ]
    then
       echo "No guides mapped: GFF has \$n_lines lines"
       exit 1

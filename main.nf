@@ -263,21 +263,20 @@ workflow {
    )
 
    fetch_genome_from_NCBI.out
-         .map { v -> tuple( v[0], v[1][1], v[2] ) }
-         .set { genome_info0 }
+      .map { v -> tuple( v[0], v[1][0], v[2] ) }
+      .set { genome_info0 }
 
    if ( params.use_eggnog ) {
+
       Channel.of( params.eggnog_url ) 
          | download_eggnog_databases
-      genome_info0
+      fetch_genome_from_NCBI.out
+         .map { v -> tuple( v[0], v[1][1], v[2] ) }
          .combine( download_eggnog_databases.out ) 
          | get_functional_sets_with_eggnog
 
-   }
-
-   if ( params.use_eggnog ) {
-
       genome_info0
+         .map { v -> tuple( v[0], v[1][0] ) }
          .combine( get_functional_sets_with_eggnog.out.gff, by: 0 )
          .set { genome_info }
 
