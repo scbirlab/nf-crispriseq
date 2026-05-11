@@ -121,7 +121,7 @@ process download_FASTQ_from_SRA {
    set -euxo pipefail 
    
    fastq-dump \
-      -X 1000000 \
+      -X 10000000 \
       --read-filter pass \
       --origfmt \
       --defline-seq '@${sra_run_id}:rd.\$si:\$sg:\$sn' \

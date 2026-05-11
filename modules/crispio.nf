@@ -27,7 +27,7 @@ process design_guides_with_crispio {
       -o guide-design.gff \
       2> >(tee guide-design.log >&2)
 
-   n_lines=\$(grep -v ^# guide-design.gff | wc -l)
+   n_lines=\$(grep -v '^#' guide-design.gff | wc -l)
    if [ "\$n_lines" -eq 0 ]
    then
       echo "No guides mapped: GFF has \$n_lines lines"
