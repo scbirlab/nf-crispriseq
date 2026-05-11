@@ -17,7 +17,7 @@ dependencies:
     - conda-forge::pigz
     - conda-forge::unzip
     - pip:
-        - "bartab>=0.0.10"
+        - "bartab>=0.0.10.post1"
         - "crispio>=0.0.6"
         - 'carabiner-tools[mpl,pd]>=0.0.5.post3'
         - 'cutadapt>=5.0'
