@@ -77,8 +77,8 @@ if ( params.do_fitness && !params.growth_column && !params.use_spike )
     error "do_fitness = true requires either growth_column or use_spike = true"
 if ( params.allow_guide_errors != false && !(params.allow_guide_errors instanceof Integer) )
     error "allow_guide_errors must be an integer (number of mismatches), not a boolean"
-if ( params.max_length && params.max_length <= params.min_length )
-    error "max_length (${params.max_length}) must be greater than min_length (${params.min_length})"
+if ( params.max_length && (params.max_length < params.min_length) )
+    error "max_length (${params.max_length}) must be greater than or equal to min_length (${params.min_length})"
 if ( params.guides && !file(params.inputs).isDirectory() )
     error "inputs directory does not exist: ${params.inputs}"
 
@@ -262,27 +262,30 @@ workflow {
       Channel.value( true ), // include protein FASTA for eggNOG
    )
 
+   fetch_genome_from_NCBI.out
+         .map { v -> tuple( v[0], v[1][1], v[2] ) }
+         .set { genome_info0 }
+
    if ( params.use_eggnog ) {
       Channel.of( params.eggnog_url ) 
          | download_eggnog_databases
-      fetch_genome_from_NCBI.out
-         .map { v -> tuple( v[0], v[1][1], v[2] ) }
+      genome_info0
          .combine( download_eggnog_databases.out ) 
          | get_functional_sets_with_eggnog
 
    }
 
-   fetch_genome_from_NCBI.out
-      .map { v -> tuple( v[0], v[1][0] ) }
-      .set { genome_info0 }
-
    if ( params.use_eggnog ) {
+
       genome_info0
          .combine( get_functional_sets_with_eggnog.out.gff, by: 0 )
          .set { genome_info }
+
    }
    else {
+
       genome_info0.set { genome_info }
+
    }
    
    trim_using_cutadapt(

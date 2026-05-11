@@ -19,11 +19,20 @@ process design_guides_with_crispio {
 
    script:
    """
+   set -euox pipefail
+   
    crispio generate "${genome}" \
       --annotations "${gff}" \
       --pam ${pam} \
       -o guide-design.gff \
-      2> guide-design.log
+      2> >(tee guide-design.log >&2)
+
+   n_lines=\$(grep -v ^# guide-design.gff | wc -l)
+   if [ "\$n_lines" -eq 0 ]
+   then
+      echo "No guides mapped: GFF has \$n_lines lines"
+      exit 1
+   fi
 
    """
 }
@@ -50,14 +59,23 @@ process map_guides_to_genome_features {
 
    script:
    """
+   set -euox pipefail
+
    crispio map "${guide_fasta}" \
       --genome "${genome_fasta}" \
       --annotations "${gff}" \
       --pam "${pam}" \
-   2> map.log \
+   2> >(tee map.log >&2) \
    | crispio featurize \
       --scaffold "${scaffold}" \
    > mapped.gff
+
+   n_lines=\$(grep -v ^# mapped.gff | wc -l)
+   if [ "\$n_lines" -eq 0 ]
+   then
+      echo "No guides mapped: GFF has \$n_lines lines"
+      exit 1
+   fi
 
    """
 }
